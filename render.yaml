@@ -13,11 +13,11 @@ services:
       - key: SNAKE_JWT_SECRET
         generateValue: true
       - key: SNAKE_REWARD_SIGNER_PRIVATE_KEY
-        value: "0x0000000000000000000000000000000000000000000000000000000000000001"
+        sync: false
       - key: UPSTASH_REDIS_REST_URL
-        value: "https://humane-squirrel-81325.upstash.io"
+        sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
-        value: "gQAAAAAAAT2tAAIgcDIyMzUxNTY0YjVhYzc0MzkxODEwMGZlOWJhNzQ4MzZjMw"
+        sync: false
       - key: BASE_SEPOLIA_RPC_URL
         value: "https://sepolia.base.org"
       - key: CHAIN_ID
@@ -25,4 +25,4 @@ services:
       - key: CORS_ORIGINS
         value: "http://localhost:3000,https://frontend-alpha-three-18.vercel.app"
       - key: SNAKE_DATABASE_URL
-        value: ""
+        sync: false

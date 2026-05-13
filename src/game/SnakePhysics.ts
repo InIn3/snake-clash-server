@@ -1,11 +1,11 @@
 import type { Snake, Direction, Vec2 } from '../types';
-import { CELL_SIZE, SNAKE_SPEED, BOOST_SPEED, ARENA_WIDTH, ARENA_HEIGHT } from './constants';
+import { SNAKE_SPEED, BOOST_SPEED, ARENA_WIDTH, ARENA_HEIGHT, TICK_MS } from './constants';
 
 export class SnakePhysics {
   // Advance snake one tick. Returns the new head position and whether it ate food.
   static move(snake: Snake, ate: boolean): { head: Vec2; poppedTail: Vec2 | null } {
     const speed  = snake.boosting ? BOOST_SPEED : SNAKE_SPEED;
-    const distPerTick = (speed / 60) * (1000 / 20); // px moved per tick at 20 ticks/s
+    const distPerTick = speed * (TICK_MS / 1000);
 
     const prevHead = snake.segments[0]!;
     const dirVec   = SnakePhysics.dirVec(snake.direction);
