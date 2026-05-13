@@ -14,6 +14,9 @@ import {
 import { config } from '../config';
 
 const CELL = 20; // segment size
+const BOT_TARGET_PLAYERS = 6;
+const BOT_NAMES = ['Byte', 'Nova', 'Viper', 'Flux', 'Orbit', 'Glitch', 'Pulse', 'Zero'];
+const BOT_SKINS = ['default-blue', 'default-green', 'default-purple', 'fire-trail'];
 
 export class GameRoom {
   readonly id: string;
@@ -87,6 +90,8 @@ export class GameRoom {
     });
 
     logger.info({ roomId: this.id, playerId: player.id }, 'Player joined room');
+
+    this._ensureBots();
 
     // Auto-start once min players reached (with countdown)
     if (this.snakes.size >= config.game.minStartPlayers && this.phase === 'WAITING') {
@@ -183,6 +188,7 @@ export class GameRoom {
     // Process each snake
     for (const [playerId, snake] of this.snakes) {
       if (!snake.alive) continue;
+      if (snake.isBot) this._updateBotDirection(snake, now);
 
       // Remove invincibility
       if (snake.invincible && now > snake.invincibleUntil) {
@@ -254,8 +260,9 @@ export class GameRoom {
 
     // Check game-over conditions — require at least 5s of play before ending
     const aliveCount = [...this.snakes.values()].filter(s => s.alive).length;
+    const realAliveCount = [...this.snakes.values()].filter(s => s.alive && !s.isBot).length;
     const elapsedMs = Date.now() - this.startedAt;
-    if (aliveCount === 0) {
+    if (aliveCount === 0 || realAliveCount === 0) {
       setTimeout(() => this._endGame(), 500);
     } else if (aliveCount <= 1 && this.snakes.size > 1 && elapsedMs >= 5000) {
       setTimeout(() => this._endGame(), 2000);
@@ -323,7 +330,7 @@ export class GameRoom {
     for (const snake of allPlayers) {
       const socketId = snake.socketId;
       const myResult = resultMap.get(snake.playerId);
-      this.io.to(socketId).emit('server:ended', { results, myResult });
+      if (!snake.isBot) this.io.to(socketId).emit('server:ended', { results, myResult });
     }
 
     logger.info({ roomId: this.id, playerCount: allPlayers.length }, 'Game ended');
@@ -388,6 +395,100 @@ export class GameRoom {
     return segs;
   }
 
+  private _ensureBots() {
+    if (this.phase !== 'WAITING') return;
+    const realPlayers = [...this.snakes.values()].filter(s => !s.isBot).length;
+    if (realPlayers === 0) return;
+    const target = Math.min(BOT_TARGET_PLAYERS, this.maxPlayers);
+    const botsToAdd = Math.max(0, target - this.snakes.size);
+    for (let i = 0; i < botsToAdd; i++) this._addBot();
+  }
+
+  private _addBot() {
+    const botNumber = [...this.snakes.values()].filter(s => s.isBot).length + 1;
+    const playerId = `bot-${this.id.slice(0, 8)}-${botNumber}`;
+    const spawnPos = this._randomSpawn();
+    const name = `${BOT_NAMES[(botNumber - 1) % BOT_NAMES.length]} Bot`;
+    const skinId = BOT_SKINS[(botNumber - 1) % BOT_SKINS.length]!;
+    const snake: Snake = {
+      id:              uuid(),
+      playerId,
+      playerName:      name,
+      socketId:        `bot:${playerId}`,
+      segments:        this._buildInitialSegments(spawnPos),
+      direction:       'RIGHT',
+      nextDirection:   'RIGHT',
+      speed:           150,
+      length:          INITIAL_LENGTH,
+      score:           0,
+      skinId,
+      alive:           true,
+      rank:            0,
+      boosting:        false,
+      invincible:      true,
+      invincibleUntil: Date.now() + SPAWN_INVINCIBLE_MS,
+      boostDrainAccum: 0,
+      survivalSeconds: 0,
+      spawnedAt:       Date.now(),
+      lastInputSeq:    -1,
+      isBot:           true,
+      aiNextTurnAt:    0,
+    };
+    this.snakes.set(playerId, snake);
+    this.io.to(this.id).emit('server:playerJoined', {
+      playerId,
+      playerName: name,
+      playerCount: this.snakes.size,
+      isBot: true,
+    });
+  }
+
+  private _updateBotDirection(snake: Snake, now: number) {
+    if ((snake.aiNextTurnAt ?? 0) > now) return;
+    snake.aiNextTurnAt = now + 250 + Math.random() * 500;
+
+    const head = snake.segments[0];
+    if (!head) return;
+    const margin = 180;
+    let desired: Direction | null = null;
+
+    if (head.x < margin) desired = 'RIGHT';
+    else if (head.x > ARENA_WIDTH - margin) desired = 'LEFT';
+    else if (head.y < margin) desired = 'DOWN';
+    else if (head.y > ARENA_HEIGHT - margin) desired = 'UP';
+    else {
+      const food = this._nearestFood(head);
+      if (food) {
+        const dx = food.x - head.x;
+        const dy = food.y - head.y;
+        desired = Math.abs(dx) > Math.abs(dy)
+          ? (dx > 0 ? 'RIGHT' : 'LEFT')
+          : (dy > 0 ? 'DOWN' : 'UP');
+      }
+    }
+
+    if (!desired || Math.random() < 0.15) {
+      const dirs: Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+      desired = dirs[Math.floor(Math.random() * dirs.length)]!;
+    }
+
+    snake.nextDirection = SnakePhysics.validateDirection(snake.direction, desired);
+    snake.boosting = false;
+  }
+
+  private _nearestFood(head: { x: number; y: number }): Food | null {
+    let nearest: Food | null = null;
+    let bestDist = Infinity;
+    for (const food of Object.values(this.food.serialize())) {
+      const dist = (food.x - head.x) ** 2 + (food.y - head.y) ** 2;
+      if (dist < bestDist) {
+        bestDist = dist;
+        nearest = food;
+      }
+    }
+    return nearest;
+  }
+
   private _randomSpawn() {
     const margin = 200;
     return {
@@ -404,7 +505,7 @@ export class GameRoom {
         segments: s.segments, direction: s.direction,
         speed: s.speed, length: s.length, score: s.score,
         skin: { id: s.skinId }, alive: s.alive, rank: s.rank,
-        boosting: s.boosting, invincible: s.invincible,
+        boosting: s.boosting, invincible: s.invincible, isBot: !!s.isBot,
       };
     });
     return {
@@ -424,7 +525,7 @@ export class GameRoom {
   // ── Public accessors ──────────────────────────────────────
 
   isFull()        { return this.snakes.size >= this.maxPlayers; }
-  isEmpty()       { return this.snakes.size === 0; }
+  isEmpty()       { return [...this.snakes.values()].every(s => s.isBot); }
   getPhase()      { return this.phase; }
   getPlayerCount(){ return this.snakes.size; }
   getRoomId()     { return this.id; }

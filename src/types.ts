@@ -29,6 +29,8 @@ export interface Snake {
   survivalSeconds: number;
   spawnedAt: number;
   lastInputSeq: number;
+  isBot?: boolean;
+  aiNextTurnAt?: number;
 }
 
 export interface Food {
