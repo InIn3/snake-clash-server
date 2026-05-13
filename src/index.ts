@@ -82,7 +82,14 @@ async function bootstrap() {
 
   const io = new SocketServer(httpServer, {
     cors: {
-      origin: config.cors.origins,
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        const allowed = config.cors.origins;
+        const ok = allowed.some(o => o === origin) ||
+                   /\.vercel\.app$/.test(origin) ||
+                   origin === 'http://localhost:3000';
+        cb(null, ok);
+      },
       credentials: true,
       methods: ['GET', 'POST'],
     },
