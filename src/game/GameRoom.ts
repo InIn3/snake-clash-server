@@ -15,7 +15,6 @@ import { config } from '../config';
 
 const CELL = 20; // segment size
 const BOT_TARGET_PLAYERS = 6;
-const BOT_NAMES = ['Byte', 'Nova', 'Viper', 'Flux', 'Orbit', 'Glitch', 'Pulse', 'Zero'];
 const BOT_SKINS = ['default-blue', 'default-green', 'default-purple', 'fire-trail'];
 
 export class GameRoom {
@@ -305,7 +304,8 @@ export class GameRoom {
     alive.forEach((s, i) => { s.rank = i + 1; });
 
     const allPlayers = [...this.snakes.values()].sort((a, b) => a.rank - b.rank);
-    const results: MatchRecord[] = allPlayers.map(snake => ({
+    const realPlayers = allPlayers.filter(snake => !snake.isBot);
+    const results: MatchRecord[] = realPlayers.map(snake => ({
       matchId:       uuid(),
       roomId:        this.id,
       playerId:      snake.playerId,
@@ -333,7 +333,7 @@ export class GameRoom {
       if (!snake.isBot) this.io.to(socketId).emit('server:ended', { results, myResult });
     }
 
-    logger.info({ roomId: this.id, playerCount: allPlayers.length }, 'Game ended');
+    logger.info({ roomId: this.id, playerCount: allPlayers.length, savedResults: results.length }, 'Game ended');
   }
 
   // ── Helpers ───────────────────────────────────────────────
@@ -408,7 +408,8 @@ export class GameRoom {
     const botNumber = [...this.snakes.values()].filter(s => s.isBot).length + 1;
     const playerId = `bot-${this.id.slice(0, 8)}-${botNumber}`;
     const spawnPos = this._randomSpawn();
-    const name = `${BOT_NAMES[(botNumber - 1) % BOT_NAMES.length]} Bot`;
+    const botAddress = this._makeBotAddress();
+    const name = this._shortWallet(botAddress);
     const skinId = BOT_SKINS[(botNumber - 1) % BOT_SKINS.length]!;
     const snake: Snake = {
       id:              uuid(),
@@ -432,6 +433,7 @@ export class GameRoom {
       spawnedAt:       Date.now(),
       lastInputSeq:    -1,
       isBot:           true,
+      botTraceId:      `${playerId}:${botAddress}`,
       aiNextTurnAt:    0,
     };
     this.snakes.set(playerId, snake);
@@ -441,6 +443,14 @@ export class GameRoom {
       playerCount: this.snakes.size,
       isBot: true,
     });
+  }
+
+  private _makeBotAddress() {
+    return `0x${(uuid() + uuid()).replace(/-/g, '').slice(0, 40)}`;
+  }
+
+  private _shortWallet(address: string) {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   }
 
   private _updateBotDirection(snake: Snake, now: number) {

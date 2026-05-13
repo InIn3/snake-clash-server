@@ -30,6 +30,7 @@ export interface Snake {
   spawnedAt: number;
   lastInputSeq: number;
   isBot?: boolean;
+  botTraceId?: string;
   aiNextTurnAt?: number;
 }
 
