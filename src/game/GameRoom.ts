@@ -255,7 +255,9 @@ export class GameRoom {
     // Check game-over conditions — require at least 5s of play before ending
     const aliveCount = [...this.snakes.values()].filter(s => s.alive).length;
     const elapsedMs = Date.now() - this.startedAt;
-    if (aliveCount <= 1 && this.snakes.size > 1 && elapsedMs >= 5000) {
+    if (aliveCount === 0) {
+      setTimeout(() => this._endGame(), 500);
+    } else if (aliveCount <= 1 && this.snakes.size > 1 && elapsedMs >= 5000) {
       setTimeout(() => this._endGame(), 2000);
     }
   }
