@@ -76,6 +76,8 @@ export class GameRoom {
     this.socketToPlayer.set(socket.id, player.id);
 
     socket.join(this.id);
+    this._ensureBots();
+
     socket.emit('server:joined', {
       playerId: player.id,
       roomId:   this.id,
@@ -90,8 +92,6 @@ export class GameRoom {
     });
 
     logger.info({ roomId: this.id, playerId: player.id }, 'Player joined room');
-
-    this._ensureBots();
 
     // Auto-start once min players reached (with countdown)
     if (this.snakes.size >= config.game.minStartPlayers && this.phase === 'WAITING') {
