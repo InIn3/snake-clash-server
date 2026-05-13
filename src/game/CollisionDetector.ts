@@ -1,70 +1,62 @@
 import type { Snake, Vec2 } from '../types';
 import { HEAD_COLLISION_RADIUS, ARENA_WIDTH, ARENA_HEIGHT } from './constants';
 
-export interface CollisionResult {
-  type: 'WALL' | 'SELF' | 'SNAKE' | 'NONE';
-  killedBy?: string; // playerId of killer snake
+export interface CollisionEvent {
+  victimId:  string;
+  killedBy?: string;
 }
 
 export class CollisionDetector {
-  // Check wall + snake-body collisions for a single snake head
-  static check(snake: Snake, allSnakes: Map<string, Snake>): CollisionResult {
+  /**
+   * Slither.io rules:
+   *  - head hits own body / wall → attacker dies
+   *  - head hits another snake's body → BODY OWNER dies (attacker survives)
+   *  - head-to-head → smaller snake dies (tie = both die, handled per-snake)
+   *
+   * Returns all elimination events caused by `snake` this tick.
+   */
+  static check(snake: Snake, allSnakes: Map<string, Snake>): CollisionEvent[] {
     const head = snake.segments[0];
-    if (!head) return { type: 'NONE' };
+    if (!head) return [];
 
-    // Wall collision
+    // ── Wall ─────────────────────────────────────────────
     if (head.x <= 0 || head.x >= ARENA_WIDTH || head.y <= 0 || head.y >= ARENA_HEIGHT) {
-      return { type: 'WALL' };
+      return [{ victimId: snake.playerId }];
     }
 
-    // Self collision (skip first 4 segments to avoid false positives near head)
+    // ── Self ─────────────────────────────────────────────
     for (let i = 4; i < snake.segments.length; i++) {
       if (CollisionDetector._dist2(head, snake.segments[i]!) < HEAD_COLLISION_RADIUS ** 2) {
-        return { type: 'SELF' };
+        return [{ victimId: snake.playerId }];
       }
     }
 
-    // Other snake collisions
+    const events: CollisionEvent[] = [];
+
     for (const [otherId, other] of allSnakes) {
       if (otherId === snake.playerId || !other.alive) continue;
 
-      // Head-to-head: both die, smaller snake loses (tie = both die)
+      // ── Head-to-head ──────────────────────────────────
       const otherHead = other.segments[0]!;
-      if (CollisionDetector._dist2(head, otherHead) < (HEAD_COLLISION_RADIUS * 2) ** 2) {
+      if (CollisionDetector._dist2(head, otherHead) < (HEAD_COLLISION_RADIUS * 2.2) ** 2) {
         if (snake.length <= other.length) {
-          return { type: 'SNAKE', killedBy: other.playerId };
+          // This snake loses
+          return [{ victimId: snake.playerId, killedBy: other.playerId }];
         }
-        // This snake wins head-to-head — other snake handled when its turn runs
+        // This snake wins — the other snake's own check will catch it
         continue;
       }
 
-      // Head-into-body collision
+      // ── Head-into-body (Slither.io: body owner dies) ──
       for (let i = 1; i < other.segments.length; i++) {
         if (CollisionDetector._dist2(head, other.segments[i]!) < HEAD_COLLISION_RADIUS ** 2) {
-          return { type: 'SNAKE', killedBy: other.playerId };
+          events.push({ victimId: other.playerId, killedBy: snake.playerId });
+          break;
         }
       }
     }
 
-    return { type: 'NONE' };
-  }
-
-  // Spatial grid for O(1) broad-phase (used when playerCount > 20)
-  static buildGrid(
-    snakes: Map<string, Snake>,
-    cellSize: number,
-  ): Map<string, Vec2[]> {
-    const grid = new Map<string, Vec2[]>();
-    for (const snake of snakes.values()) {
-      if (!snake.alive) continue;
-      for (const seg of snake.segments) {
-        const key = `${Math.floor(seg.x / cellSize)},${Math.floor(seg.y / cellSize)}`;
-        const cell = grid.get(key) ?? [];
-        cell.push(seg);
-        grid.set(key, cell);
-      }
-    }
-    return grid;
+    return events;
   }
 
   private static _dist2(a: Vec2, b: Vec2): number {

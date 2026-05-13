@@ -184,6 +184,9 @@ export class GameRoom {
     const foodSpawned: Food[]    = [];
     const snakePatch: Record<string, object> = {};
 
+    // Collect all collision events before eliminating (prevents double-kills)
+    const pendingElim = new Map<string, string | undefined>(); // victimId → killedBy
+
     // Process each snake
     for (const [playerId, snake] of this.snakes) {
       if (!snake.alive) continue;
@@ -217,24 +220,31 @@ export class GameRoom {
       // Increment survival time
       snake.survivalSeconds += TICK_MS / 1000;
 
-      // Collision detection (skip if invincible)
+      // Collision detection (Slither.io rules — collect events, process after loop)
       if (!snake.invincible) {
-        const result = CollisionDetector.check(snake, this.snakes);
-        if (result.type !== 'NONE') {
-          this._eliminate(playerId, result.killedBy);
-          continue;
+        const events = CollisionDetector.check(snake, this.snakes);
+        for (const evt of events) {
+          if (!pendingElim.has(evt.victimId)) {
+            pendingElim.set(evt.victimId, evt.killedBy);
+          }
         }
       }
 
       // Build patch for this snake
       snakePatch[playerId] = {
-        head:     newHead,
-        tail:     eaten ? undefined : poppedTail,
+        head:      newHead,
+        tail:      eaten ? undefined : poppedTail,
         direction: snake.direction,
-        score:    snake.score,
-        length:   snake.length,
-        boosting: snake.boosting,
+        score:     snake.score,
+        length:    snake.length,
+        boosting:  snake.boosting,
       };
+    }
+
+    // Process all eliminations — victims' dropped food goes into foodSpawned
+    for (const [victimId, killedBy] of pendingElim) {
+      const dropped = this._eliminate(victimId, killedBy);
+      foodSpawned.push(...dropped);
     }
 
     // Replenish food
@@ -270,13 +280,26 @@ export class GameRoom {
 
   // ── Elimination ───────────────────────────────────────────
 
-  private _eliminate(playerId: string, killedBy?: string, disconnected = false) {
+  private _eliminate(playerId: string, killedBy?: string, disconnected = false): Food[] {
     const snake = this.snakes.get(playerId);
-    if (!snake || !snake.alive) return;
+    if (!snake || !snake.alive) return [];
 
     snake.alive = false;
     snake.killedBy     = killedBy;
     snake.eliminatedAt = Date.now();
+
+    // Drop food along body (Slither.io style — others rush in to eat the mass)
+    const droppedFood: Food[] = [];
+    const step = Math.max(2, Math.floor(snake.segments.length / 25)); // max ~25 pellets
+    for (let i = 0; i < snake.segments.length; i += step) {
+      const seg = snake.segments[i];
+      if (!seg) continue;
+      const f = this.food.spawnOne({
+        x: seg.x + (Math.random() - 0.5) * 24,
+        y: seg.y + (Math.random() - 0.5) * 24,
+      });
+      droppedFood.push(f);
+    }
 
     const aliveCount = [...this.snakes.values()].filter(s => s.alive).length;
     const rank = aliveCount + 1;
@@ -288,6 +311,7 @@ export class GameRoom {
     });
 
     logger.debug({ roomId: this.id, playerId, killedBy, rank }, 'Player eliminated');
+    return droppedFood;
   }
 
   // ── End game ──────────────────────────────────────────────

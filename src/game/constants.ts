@@ -1,14 +1,14 @@
-export const ARENA_WIDTH   = 4000;
-export const ARENA_HEIGHT  = 4000;
+export const ARENA_WIDTH   = 2000;
+export const ARENA_HEIGHT  = 2000;
 export const CELL_SIZE     = 20;
 export const SNAKE_SPEED   = 180;   // px/s
 export const BOOST_SPEED   = 320;   // px/s while boosting
 export const TICK_RATE     = 20;    // ticks per second
 export const TICK_MS       = 1000 / TICK_RATE;
-export const FOOD_COUNT    = 600;
+export const FOOD_COUNT    = 250;
 export const INITIAL_LENGTH = 10;
 export const SPAWN_INVINCIBLE_MS = 3000;
-export const MATCH_DURATION_S   = 300; // 5 minutes
+export const MATCH_DURATION_S   = 60;  // 1 minute
 
 export const FOOD_VALUE: Record<string, number> = {
   NORMAL: 1, POWER: 3, GOLDEN: 10, SPEED: 1, SHIELD: 1,
