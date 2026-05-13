@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ethers } from 'ethers';
+import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { db } from '../db/client';
 import { requireAuth } from '../middleware/auth';
@@ -24,6 +25,7 @@ matchRouter.post('/queue', requireAuth, matchRateLimit, async (req, res) => {
   res.json({
     success: true,
     data: {
+      roomId:   uuid(),
       token:    req.headers.authorization?.slice(7) ?? '',
       mode:     parse.data.mode,
       skinId:   parse.data.skinId ?? 'default-blue',

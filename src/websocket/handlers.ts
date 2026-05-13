@@ -38,23 +38,24 @@ export function registerSocketHandlers(io: Server, matchmaking: MatchmakingServi
       }
 
       try {
-        const rows = await db.query(
-          'SELECT id, username, active_skin_id, level, xp FROM players WHERE id = $1',
-          [payload.playerId],
-        );
-        const row = rows.rows[0];
-        if (!row) {
-          socket.emit('server:error', { code: 'PLAYER_NOT_FOUND', message: 'Player not found' });
-          return;
-        }
+        let player: { id: string; username: string; activeSkinId: string; level: number; xp: number };
 
-        const player = {
-          id:           row.id,
-          username:     row.username,
-          activeSkinId: row.active_skin_id,
-          level:        row.level,
-          xp:           row.xp,
-        };
+        try {
+          const rows = await db.query(
+            'SELECT id, username, active_skin_id, level, xp FROM players WHERE id = $1',
+            [payload.playerId],
+          );
+          const row = rows.rows[0];
+          if (row) {
+            player = { id: row.id, username: row.username, activeSkinId: row.active_skin_id, level: row.level, xp: row.xp };
+          } else {
+            // Guest not persisted to DB — build from JWT payload
+            player = { id: payload.playerId, username: payload.username ?? `Player_${payload.playerId.slice(0, 6)}`, activeSkinId: data.skinId ?? 'default-blue', level: 1, xp: 0 };
+          }
+        } catch {
+          // DB unavailable — build from JWT payload
+          player = { id: payload.playerId, username: payload.username ?? `Player_${payload.playerId.slice(0, 6)}`, activeSkinId: data.skinId ?? 'default-blue', level: 1, xp: 0 };
+        }
 
         matchmaking.enqueue(socket, player, data.skinId ?? player.activeSkinId);
         socket.data.playerId = player.id;
