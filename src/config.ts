@@ -29,7 +29,7 @@ export const config = {
   game: {
     tickRate:        parseInt(optional('GAME_TICK_RATE', '20'), 10),
     maxPlayers:      parseInt(optional('MAX_PLAYERS_PER_ROOM', '50'), 10),
-    minStartPlayers: parseInt(optional('MIN_START_PLAYERS', '2'), 10),
+    minStartPlayers: parseInt(optional('MIN_START_PLAYERS', '1'), 10),
     arenaWidth:      parseInt(optional('ARENA_WIDTH', '4000'), 10),
     arenaHeight:     parseInt(optional('ARENA_HEIGHT', '4000'), 10),
     matchDuration:   parseInt(optional('MATCH_DURATION_S', '300'), 10),
